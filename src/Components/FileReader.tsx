@@ -77,7 +77,7 @@ const FileReader: React.FC<FileReaderProps> = (props): React.ReactElement => {
           const ele: HTMLElement|null = kmlDoc.getElementsByTagName('Document')[0];
           if (ele === null || ele === undefined) throw new Error('Document undefined');
           const kmlData:string|any = await getTagMatches(ele, kmlTags);
-          dataObj[file.name] = kmlData.length > 0 ? `<Folder id="${uuid()}"><name>${file.name}</name><open>0</open>${kmlData}</Folder>` : '$ERROR$';
+          dataObj[file.name] = kmlData.length > 0 ? `<Folder id="${uuid()}">\n<name>${file.name}</name>\n<open>1</open>\n${kmlData}\n</Folder>\n` : '$ERROR$';
           
           // add any additional styles required
           const styleXmlItems:any = ele.getElementsByTagName('Style');
@@ -98,7 +98,7 @@ const FileReader: React.FC<FileReaderProps> = (props): React.ReactElement => {
     }
 
     // download the data for the user's reference
-    await downloadJsonFile(dataObj);
+    // await downloadJsonFile(dataObj);
 
     // download the kml
     const kmlStr: string = await generateKmlFile(dataObj);
