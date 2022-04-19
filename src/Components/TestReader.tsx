@@ -21,7 +21,7 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
   const [markedFileText, setMarkedFileText] = useState<string>('');
   const [numMatches, setNumMatches] = useState<number>(0);
 
-  const [kmDoc, setKmDoc] = useState<Document|null>(null);
+  const [kmDoc, setKmDoc] = useState<any>(null);
   const [kmFileText, setKmFileText] = useState<string>('');
   const [kmTagCounts, setKmTagCounts] = useState<any>({});
 
@@ -52,7 +52,6 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
 
   useEffect(() => {
     if (kmDoc !== null) {
-      console.log('re-parsing kml');
       displayKmText(kmDoc, props.kmlTags);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -143,9 +142,13 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
 
       // parse if kml or kmz
       const file: File = await fileHandle.getFile();
-      let kmlDoc:Document|any = null;
+      let kmlDoc:any = null;
       if (file.name.endsWith('.kmz')) {
-        kmlDoc = await getDataFromKmz(await fileHandle.getFile());
+        const kmlObj = await getDataFromKmz(await fileHandle.getFile());
+        const kmlData = kmlObj['kml'];
+        if (kmlData !== null && kmlData !== undefined) {
+          kmlDoc = kmlData;
+        }
       } else {
         kmlDoc = await getKmlDom(await file.text());
       }
@@ -164,29 +167,32 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
 
     // get the tags
     const kmlText:string|any = await getTagMatches(ele, kmlTags);
-    let styleStr:string = '';
-    Object.values(config.kml_default_styles).forEach((style:string) => styleStr += style);
+
+    // add any additional styles required
+    const styleXmlItems:any = ele.getElementsByTagName('Style');
+    const styleIds: string[] = [];
+    let styleStr: string = '';
+    if ((styleXmlItems?.length ?? 0) !== 0) {
+      await Promise.all(Array.from(styleXmlItems).map(async (item:any) => {
+        return new Promise((resolve) => {
+          if ((item?.id?.length ?? 0) !== 0 
+            && styleIds.indexOf(item.id) === -1) {
+            styleStr += `${item.outerHTML}`;
+            styleIds.push(item.id);
+            resolve('');
+          }
+          resolve('');
+        });
+      }));
+    }
+
     const finalKmlDomText:string = `${config.kml_header}
       ${styleStr}
       <Folder id="${uuid()}"><name>test-file</name><open>0</open>${kmlText}</Folder>
       ${config.kml_footer}
     `;
     const finalKmlDom: Document = await getKmlDom(finalKmlDomText);
-
-    // add any additional styles required
-    const styleXmlItems:any = ele.getElementsByTagName('Style');
     const finalKmlDomDoc = finalKmlDom.getElementsByTagName('Document')[0];
-    const newStyleItems:string[] = [];
-    if ((styleXmlItems?.length ?? 0) !== 0) {
-      Array.from(styleXmlItems).forEach((item:any) => {
-        if ((item?.id?.length ?? 0) !== 0 
-          && config.kml_default_style_ids.indexOf(item.id) === -1 && newStyleItems.indexOf(item.id) === -1) {
-          console.log(item.id);
-          finalKmlDomDoc.append(item);
-          newStyleItems.push(item.id);
-        }
-      });
-    }
 
     // count each tag scraped
     const kmlTagCountData:any = {};

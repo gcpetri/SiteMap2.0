@@ -1,4 +1,5 @@
 import * as PDFJS from 'pdfjs-dist';
+import { v4 as uuid } from 'uuid';
 const JSZip = require("jszip");
 
 PDFJS.GlobalWorkerOptions.workerSrc = "//cdnjs.cloudflare.com/ajax/libs/pdf.js/2.13.216/pdf.worker.js";
@@ -60,29 +61,44 @@ export const getKmlDom = async (text:string) => {
 
 export const getDataFromKmz = async (file:File) => {
   const zip = new JSZip();
-  const getDataFromKmzPromise = new Promise((resolve, reject) => {
-    zip.loadAsync(file).then((content: any) => {
-      content.forEach((relPath: string, file: any) => {
-        if (relPath.endsWith('.kml')) {
-          resolve(file.async("string").then(getKmlDom));
+  const dataObj: any = {
+    'kml': null,
+    'files': [],
+  };
+  await zip.loadAsync(file).then(async (content: any) => {
+    // @ts-ignore
+    await Promise.all(Object.entries(content.files).map(async ([name, file]) => {
+      return new Promise(async (resolve) => {
+        if (name.endsWith('.kml')) {
+          // @ts-ignore
+          resolve(dataObj['kml'] = await file.async("string").then(getKmlDom));
+        }
+        if (name.endsWith('.PNG') || name.endsWith('.png')) {
+          resolve(await dataObj['files'].push(file));
         }
       });
-      resolve(null);
-    });
+    }));
   });
-  return getDataFromKmzPromise;
+  return dataObj;
 };
 
 export const getTagMatches = async (ele:HTMLElement, kmlTags:string[]) => {
-  const getDataFromDoc = new Promise((resolve) => {
-    let kmlData:string = '';
-    kmlTags.forEach((tagName:string) => {
+  let kmlData:string = '';
+  await Promise.all(kmlTags.map(async (tagName:string) => {
+    return new Promise(async (resolve) => {
+      let newKmlDataItem: string = '';
       const xmlItems:any = ele.getElementsByTagName(tagName);
       if ((xmlItems?.length ?? 0) !== 0) {
-        Array.from(xmlItems).forEach((item:any) => kmlData += `${item.outerHTML}`);
+        await Promise.all(Array.from(xmlItems).map(async (item:any) => new Promise((resolve2) => {
+          item.setAttribute('id', uuid());
+          item.removeAttribute('xmlns');
+          // eslint-disable-next-line no-useless-escape
+          resolve2(newKmlDataItem += `${item.outerHTML}`); // .replace(/xmlns(:gx)?=\"(.*?)\"/gm, ''));
+        })));
+        resolve(kmlData += newKmlDataItem);
       }
+      resolve('');
     });
-    resolve(kmlData);
-  });
-  return getDataFromDoc;
+  }));
+  return kmlData;
 };

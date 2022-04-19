@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { Close } from "@mui/icons-material";
 import { getDataFromKmz, getPdfText, getRegexMatches, getTagMatches } from "../Services/scrapper";
 import { generateRegexStr, regExpFlags } from "../Services/regex";
-import { config } from "../config";
 import { v4 as uuid } from 'uuid';
-import { downloadKmlFile, downloadJsonFile } from "../Services/download";
+import { downloadKmzFile } from "../Services/download";
 import { generateKmlFile } from "../Services/kml";
+const JSZip = require("jszip");
 
 interface FileReaderProps{
   regexItems: string[],
@@ -38,58 +38,122 @@ const FileReader: React.FC<FileReaderProps> = (props): React.ReactElement => {
 
   const readFileData = async (dirHandle:FileSystemDirectoryHandle, regexExp:RegExp|null, kmlTags:string[]) => {
     // generate a recursive file iterator
-    async function* getFilesRecursively(entry:FileSystemDirectoryHandle): AsyncIterable<File> {
+    async function* getFilesRecursively(path:string, entry:FileSystemDirectoryHandle): AsyncIterable<[string,File]> {
       // tslint:disable-next-line await-promise
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       for await (const [name, handle] of entry) {
         if (handle.kind === 'file') { // it is a file
-          yield handle.getFile();
+          const newPath: string = path.length === 0 ? name : `${path}/${name}`;
+          const file: File = await handle.getFile();
+          yield [newPath, file];
         }
         else { // it is a directory
-          yield* getFilesRecursively(handle);
+          const newPath: string = path.length === 0 ? handle.name : `${path}/${handle.name}`;
+          yield* getFilesRecursively(newPath, handle);
         }
       }
     };
 
     // loop through all files and add to data object
-    const iterator: AsyncIterable<File> = getFilesRecursively(dirHandle);
+    const iterator: AsyncIterable<[string,File]> = getFilesRecursively('', dirHandle);
     const dataObj: any = {};
-    dataObj['additional-styles'] = [];
+    const styleIds: string[] = [];
+    const styleMapIds: string[] = [];
+    dataObj['styles'] = [];
+    dataObj['style-maps'] = [];
+
+    const zip = new JSZip();
     for await (let value of iterator) {
-      const file: File = value;
+      const name: string = value[0];
+      const file: File = value[1];
       if ((file.type === 'application/pdf' || file.name.endsWith('.pdf')) 
         && regexExp !== null) { // Scrape PDF
-        setCurrentFileName(file.name);
+        setCurrentFileName(name);
         try {
           const pdfText: string = await getPdfText(file);
           const regexMatches: string[] = await getRegexMatches(regexExp, pdfText);
-          dataObj[file.name] = regexMatches;
+          dataObj[name] = regexMatches;
         } catch (e:any) {
           console.log(e);
-          dataObj[file.name] = '$ERROR$';
+          dataObj[name] = '$ERROR$';
         }
       } else if ((file.type === 'application/vnd.google-earth.kmz' || file.name.endsWith('.kmz')) 
         && kmlTags.length > 0) { // Scrape KMZ
-        setCurrentFileName(file.name);
+        setCurrentFileName(name);
         try {
           // main point: get Points, GroundOverlays, etc.
-          const kmlDoc:Document|any = await getDataFromKmz(file);
+          const kmlObj:any = await getDataFromKmz(file);
+          if (kmlObj === null) throw new Error('kmz object');
+
+          const kmlDoc: Document|any = kmlObj['kml']; // kml document
+          const kmlFiles: any[] = kmlObj['files']; // image files
+
           const ele: HTMLElement|null = kmlDoc.getElementsByTagName('Document')[0];
           if (ele === null || ele === undefined) throw new Error('Document undefined');
-          const kmlData:string|any = await getTagMatches(ele, kmlTags);
-          dataObj[file.name] = kmlData.length > 0 ? `<Folder id="${uuid()}">\n<name>${file.name}</name>\n<open>1</open>\n${kmlData}\n</Folder>\n` : '$ERROR$';
-          
+
+          // add files to the zip
+          const fileNameMap:any = {};
+          if ((kmlFiles?.length ?? 0) !== 0) {
+            await Promise.all(kmlFiles.map(async (image:any) => {
+              return new Promise(async (resolve) => {
+                const newImageName: string = `files/img-${uuid()}.png`;
+                fileNameMap[image.name] = newImageName;
+                resolve(zip.file(newImageName, image.async("uint8array")));
+              });
+            }));
+          }
+
           // add any additional styles required
           const styleXmlItems:any = ele.getElementsByTagName('Style');
           if ((styleXmlItems?.length ?? 0) !== 0) {
-            Array.from(styleXmlItems).forEach((item:any) => {
-              if ((item?.id?.length ?? 0) !== 0
-                && config.kml_default_style_ids.indexOf(item.id) === -1 && dataObj['additional-styles'].indexOf(item.id) === -1) {
-                console.log(item.id);
-                dataObj['additional-styles'].push(`${item.outerHTML}`);
-              }
-            });
+            const newStyleItems: string[] = [];
+            await Promise.all(Array.from(styleXmlItems).map(async (item:any) => {
+              return new Promise(async (resolve) => {
+                if ((item?.id?.length ?? 0) !== 0 && styleIds.indexOf(item.id) === -1) {
+                  let styleStr: string = `${item.outerHTML}`;
+                  // @ts-ignore
+                  await Promise.all(Object.entries(fileNameMap).map(async ([originalImageName, newImageName]) => {
+                    return new Promise((resolve2) => {
+                      // @ts-ignore
+                      resolve2(styleStr = styleStr.replace(originalImageName, newImageName));
+                    });
+                  }));
+                  styleIds.push(item.id);
+                  resolve(newStyleItems.push(styleStr));
+                } else {
+                  resolve('');
+                }
+              });
+            }));
+            dataObj['styles'] = [...dataObj['styles'], newStyleItems];
           }
+
+          // add any additional style maps required
+          const styleMapXmlItems:any = ele.getElementsByTagName('StyleMap');
+          if ((styleMapXmlItems?.length ?? 0) !== 0) {
+            await Promise.all(Array.from(styleMapXmlItems).map(async (item:any) => {
+              return new Promise((resolve) => {
+                if ((item?.id?.length ?? 0) !== 0 && styleMapIds.indexOf(item.id) === -1) {
+                  styleMapIds.push(item.id);
+                  resolve(dataObj['style-maps'].push(`${item.outerHTML}`));
+                } else {
+                  resolve('');
+                }
+              });
+            }));
+          }
+
+          // get kml tag data
+          let kmlData:string|any = await getTagMatches(ele, kmlTags);
+          if ((kmlData?.length ?? 0) > 0) {
+            // @ts-ignore
+            await Promise.all(Object.entries(fileNameMap).map(async ([originalImageName, newImageName]) => {
+              kmlData = kmlData.replace(originalImageName, newImageName);
+            }));
+          }
+
+          // add to the data object
+          dataObj[file.name] = kmlData.length > 0 ? `<Folder id="${uuid()}">\n<name>${name}</name>\n<open>1</open>\n${kmlData}\n</Folder>\n` : '$ERROR$';
         } catch (e:any) {
           console.log(e);
           dataObj[file.name] = '$ERROR$';
@@ -97,12 +161,13 @@ const FileReader: React.FC<FileReaderProps> = (props): React.ReactElement => {
       }
     }
 
-    // download the data for the user's reference
-    // await downloadJsonFile(dataObj);
-
     // download the kml
+    console.log(dataObj);
     const kmlStr: string = await generateKmlFile(dataObj);
-    await downloadKmlFile(kmlStr);
+    const blob = new Blob([kmlStr], {type: 'text/plain'});
+    zip.file('doc.kml', blob);
+    console.log(zip);
+    await downloadKmzFile(zip);
   };
 
   const handleDirectorySelect = async (e:any) => {
@@ -158,9 +223,9 @@ const FileReader: React.FC<FileReaderProps> = (props): React.ReactElement => {
         </div>
         <div className="row-container">
           <Typography variant="overline" style={{textAlign: 'center'}}>
-            Generates a <b>kml</b> file by recursively searching the files in the directory chosen below.
+            Generates a <b>KMZ</b> file by recursively searching the files in the directory chosen below.
             <br></br>
-            It will scrape regular expression matches from <b>pdf</b> files and scrape tags from <b>kmz</b> files.
+            It will scrape regular expression matches from <b>PDF</b> files and scrape tags from <b>KMZ</b> files.
             <br></br>
           </Typography>
         </div>
@@ -185,7 +250,7 @@ const FileReader: React.FC<FileReaderProps> = (props): React.ReactElement => {
               <CircularProgress />
             </div>}
             {loading && <div className="row-container">
-              <Typography variant="caption">{currentFileName}</Typography>
+              <Typography variant="caption" style={{wordWrap: 'break-word'}}>{currentFileName}</Typography>
             </div>}
           </div>
         </div>}

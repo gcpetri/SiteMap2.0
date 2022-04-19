@@ -18,7 +18,6 @@ function App() {
   };
 
   const removeRegexItem = (oldItem:string) => {
-    console.log(oldItem);
     const newRegexItems: string[] = regexItems.filter(item => item !== oldItem);
     setRegexItems(newRegexItems);
     window.localStorage.setItem('regex-items', JSON.stringify(newRegexItems));
@@ -39,12 +38,10 @@ function App() {
   useEffect(() => {
     const cachedRegexItems: string|null = window.localStorage.getItem('regex-items');
     if (cachedRegexItems !== null && cachedRegexItems !== undefined) {
-      console.log(cachedRegexItems);
       setRegexItems(JSON.parse(cachedRegexItems));
     }
     const cachedKmlTags: string|null = window.localStorage.getItem('kml-tags');
     if (cachedKmlTags !== null && cachedKmlTags !== undefined) {
-      console.log(cachedKmlTags);
       setKmlTags(JSON.parse(cachedKmlTags));
     }
   }, []);
