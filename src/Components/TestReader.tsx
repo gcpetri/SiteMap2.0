@@ -7,6 +7,7 @@ import { config } from "../config";
 import { generateRegexStr, regExpFlags } from "../Services/regex";
 import { getDataFromKmz, getKmlDom, getPdfText, getTagMatches } from "../Services/scrapper";
 import { v4 as uuid } from 'uuid';
+import { XMLSerializer } from '@xmldom/xmldom';
 
 interface TestReaderProps {
   regexItems: string[],
@@ -152,9 +153,10 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
       } else {
         kmlDoc = await getKmlDom(await file.text());
       }
+      console.log(kmlDoc);
       if (kmlDoc === null) throw new Error('Could not get kmlDoc');
       setKmDoc(kmlDoc);
-      displayKmText(kmlDoc, props.kmlTags);
+      await displayKmText(kmlDoc, props.kmlTags);
     } catch (e:any) {
       console.log(e);
       setKmFileText('ERROR: could not parse kmz/kml');
@@ -175,7 +177,7 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
     if ((styleXmlItems?.length ?? 0) !== 0) {
       await Promise.all(Array.from(styleXmlItems).map(async (item:any) => {
         return new Promise((resolve) => {
-          if ((item?.id?.length ?? 0) !== 0 
+          if ((item?.id?.length ?? 0) !== 0
             && styleIds.indexOf(item.id) === -1) {
             styleStr += `${item.outerHTML}`;
             styleIds.push(item.id);
@@ -199,7 +201,6 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
     kmlTags.forEach((tag:string) => {
       kmlTagCountData[tag] = finalKmlDomDoc.getElementsByTagName(tag)?.length ?? 0;
     });
-
     setKmFileText(`${new XMLSerializer().serializeToString(finalKmlDom)}`);
     setKmTagCounts(kmlTagCountData);
   };

@@ -1,6 +1,7 @@
 import * as PDFJS from 'pdfjs-dist';
 import { v4 as uuid } from 'uuid';
-const JSZip = require("jszip");
+import { DOMParser } from '@xmldom/xmldom';
+const JSZip = require('jszip');
 
 PDFJS.GlobalWorkerOptions.workerSrc = "//cdnjs.cloudflare.com/ajax/libs/pdf.js/2.13.216/pdf.worker.js";
 
@@ -59,7 +60,7 @@ export const getKmlDom = async (text:string) => {
   return new DOMParser().parseFromString(text, "text/xml");
 };
 
-export const getDataFromKmz = async (file:File) => {
+export const getDataFromKmz = async (file:File, _DOMParser:any=null) => {
   const zip = new JSZip();
   const dataObj: any = {
     'kml': null,
