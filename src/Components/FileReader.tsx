@@ -1,4 +1,4 @@
-import { Button, IconButton, Snackbar, CircularProgress, Typography, Tooltip } from "@mui/material";
+import { Button, IconButton, Snackbar, CircularProgress, Typography, Tooltip, Box, Chip } from "@mui/material";
 import React from "react";
 import { useEffect, useState } from "react";
 import { Close } from "@mui/icons-material";
@@ -19,6 +19,7 @@ const FileReader: React.FC<FileReaderProps> = (props): React.ReactElement => {
   const [regExp, setRegexExp] = useState<RegExp|null>(null);
   const [currentFileName, setCurrentFileName] = useState<string>('');
   const [worker, setWorker] = useState<any>(null);
+  const [finalStats, setFinalStats] = useState<any>({});
 
   useEffect(() => {
     setMounted(true);
@@ -46,11 +47,13 @@ const FileReader: React.FC<FileReaderProps> = (props): React.ReactElement => {
     worker.onmessage = async (e:any) => {
       if (typeof e.data === "string") {
         setCurrentFileName(e.data);
-      } else {
+      } else if (e.data instanceof Blob) {
         // download the kml
         await downloadKmzFile(e.data);
         // reset
         await handleCancel();
+      } else {
+        setFinalStats(e.data);
       }
     };
     worker.postMessage([dirHandle, regexExp, kmlTags]);
@@ -156,6 +159,14 @@ const FileReader: React.FC<FileReaderProps> = (props): React.ReactElement => {
                 Cancel
               </Button>
             </div>}
+            <div className="row-container">
+              {Object.entries(finalStats).map(([statName, statCount], index:number) => {
+                return (<Box key={`tag-count-${index}`} component="span" sx={{ p: 1, border: '1px solid #f2f2f2', mr: 2, borderRadius: '20px' }}>
+                  {typeof statCount === 'number' ? <Chip label={statCount} style={{marginRight: '2px'}} /> : <Chip label={0} style={{marginRight: '2px'}} />}
+                  <span style={{fontSize: 'small'}}>{statName}</span>
+                </Box>)
+              })}
+            </div>
           </div>
         </div>}
 

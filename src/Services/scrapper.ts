@@ -1,6 +1,6 @@
 import * as PDFJS from 'pdfjs-dist';
 import { v4 as uuid } from 'uuid';
-import { DOMParser } from '@xmldom/xmldom';
+import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 const JSZip = require('jszip');
 
 PDFJS.GlobalWorkerOptions.workerSrc = "//cdnjs.cloudflare.com/ajax/libs/pdf.js/2.13.216/pdf.worker.js";
@@ -84,6 +84,7 @@ export const getDataFromKmz = async (file:File, _DOMParser:any=null) => {
 };
 
 export const getTagMatches = async (ele:HTMLElement, kmlTags:string[]) => {
+  const xmlSerializer = new XMLSerializer();
   let kmlData:string = '';
   await Promise.all(kmlTags.map(async (tagName:string) => {
     return new Promise(async (resolve) => {
@@ -94,7 +95,7 @@ export const getTagMatches = async (ele:HTMLElement, kmlTags:string[]) => {
           item.setAttribute('id', uuid());
           item.removeAttribute('xmlns');
           // eslint-disable-next-line no-useless-escape
-          resolve2(newKmlDataItem += `${item.outerHTML}`); // .replace(/xmlns(:gx)?=\"(.*?)\"/gm, ''));
+          resolve2(newKmlDataItem += `${xmlSerializer.serializeToString(item)}`); // .replace(/xmlns(:gx)?=\"(.*?)\"/gm, ''));
         })));
         resolve(kmlData += newKmlDataItem);
       }

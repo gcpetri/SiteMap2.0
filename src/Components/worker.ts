@@ -2,8 +2,9 @@
 import { getDataFromKmz, getPdfText, getRegexMatches, getTagMatches } from "../Services/scrapper";
 import { generateKmlFile } from "../Services/kml";
 import { v4 as uuid } from 'uuid';
-import JSZip from "jszip";
-// const JSZip = require("jszip");
+// import JSZip from "jszip";
+import { XMLSerializer } from '@xmldom/xmldom';
+const JSZip = require("jszip");
 
 // generate a recursive file iterator
 async function* getFilesRecursively(path:string, entry:FileSystemDirectoryHandle): AsyncIterable<[string,File]> {
@@ -39,6 +40,11 @@ onmessage = async (e:any) => {
   const styleMapIds: string[] = [];
   dataObj['styles'] = [];
   dataObj['style-maps'] = [];
+  
+  let numPdfMatches:number = 0;
+  let numKmls:number = 0;
+  let numKmlImages:number = 0;
+  let numTotalFiles:number = 0;
 
   const zip = new JSZip();
   for await (let value of iterator) {
@@ -46,22 +52,28 @@ onmessage = async (e:any) => {
     const file: File = value[1];
     if ((file.type === 'application/pdf' || file.name.endsWith('.pdf'))
       && regexExp !== null) { // Scrape PDF
+      numTotalFiles += 1;
       postMessage(name);
       try {
         const pdfText: string = await getPdfText(file);
         const regexMatches: string[] = await getRegexMatches(regexExp, pdfText);
-        dataObj[name] = regexMatches;
+        if (regexMatches.length > 0) {
+          numPdfMatches += 1;
+          dataObj[name] = regexMatches;
+        }
       } catch (e:any) {
         console.log(e);
         dataObj[name] = '$ERROR$';
       }
     } else if ((file.type === 'application/vnd.google-earth.kmz' || file.name.endsWith('.kmz')) 
       && kmlTags.length > 0) { // Scrape KMZ
+      numTotalFiles += 1;
       postMessage(name);
       try {
         // main point: get Points, GroundOverlays, etc.
         const kmlObj:any = await getDataFromKmz(file, _DOMParser);
         if (kmlObj === null) throw new Error('kmz object');
+        const xmlSerlizer = new XMLSerializer();
 
         const kmlDoc: Document|any = kmlObj['kml']; // kml document
         const kmlFiles: any[] = kmlObj['files']; // image files
@@ -72,6 +84,7 @@ onmessage = async (e:any) => {
         // add files to the zip
         const fileNameMap:any = {};
         if ((kmlFiles?.length ?? 0) !== 0) {
+          numKmlImages += kmlFiles.length;
           await Promise.all(kmlFiles.map(async (image:any) => {
             return new Promise(async (resolve) => {
               const newImageName: string = `files/img-${uuid()}.png`;
@@ -87,8 +100,9 @@ onmessage = async (e:any) => {
           const newStyleItems: string[] = [];
           await Promise.all(Array.from(styleXmlItems).map(async (item:any) => {
             return new Promise(async (resolve) => {
-              if ((item?.id?.length ?? 0) !== 0 && styleIds.indexOf(item.id) === -1) {
-                let styleStr: string = `${item.outerHTML}`;
+              const styleId = item?.attributes[0]?.nodeValue ?? '';
+              if (styleId.length !== 0 && styleIds.indexOf(styleId) === -1) {
+                let styleStr: string = `${xmlSerlizer.serializeToString(item)}`;
                 // @ts-ignore
                 await Promise.all(Object.entries(fileNameMap).map(async ([originalImageName, newImageName]) => {
                   return new Promise((resolve2) => {
@@ -96,7 +110,7 @@ onmessage = async (e:any) => {
                     resolve2(styleStr = styleStr.replace(originalImageName, newImageName));
                   });
                 }));
-                styleIds.push(item.id);
+                styleIds.push(styleId);
                 resolve(newStyleItems.push(styleStr));
               } else {
                 resolve('');
@@ -111,9 +125,10 @@ onmessage = async (e:any) => {
         if ((styleMapXmlItems?.length ?? 0) !== 0) {
           await Promise.all(Array.from(styleMapXmlItems).map(async (item:any) => {
             return new Promise((resolve) => {
-              if ((item?.id?.length ?? 0) !== 0 && styleMapIds.indexOf(item.id) === -1) {
-                styleMapIds.push(item.id);
-                resolve(dataObj['style-maps'].push(`${item.outerHTML}`));
+              const styleId = item?.attributes[0]?.nodeValue ?? '';
+              if (styleId.length !== 0 && styleMapIds.indexOf(styleId) === -1) {
+                styleMapIds.push(styleId);
+                resolve(dataObj['style-maps'].push(xmlSerlizer.serializeToString(item)));
               } else {
                 resolve('');
               }
@@ -124,6 +139,7 @@ onmessage = async (e:any) => {
         // get kml tag data
         let kmlData:string|any = await getTagMatches(ele, kmlTags);
         if ((kmlData?.length ?? 0) > 0) {
+          numKmls += 1;
           // @ts-ignore
           await Promise.all(Object.entries(fileNameMap).map(async ([originalImageName, newImageName]) => {
             kmlData = kmlData.replace(originalImageName, newImageName);
@@ -141,8 +157,23 @@ onmessage = async (e:any) => {
 
   // package it up
   console.log(dataObj);
+  // get the stats
+  const statObj:any = {
+    'Total Files': numTotalFiles,
+    'Pdf Files (with Matches)': numPdfMatches,
+    'Kmz Files (with Matches)': numKmls,
+    'Kml Images': numKmlImages,
+    'Style/StyleMap': styleIds.length + styleMapIds.length,
+  };
+  postMessage(statObj);
+
+  // send the blob
   const kmlStr: string = await generateKmlFile(dataObj);
   const blob = new Blob([kmlStr], {type: 'text/plain'});
   zip.file('doc.kml', blob);
-  postMessage(zip);
+  zip.generateAsync({type: 'blob'}).then((content:Blob) => {
+    console.log('content', content);
+    postMessage(content);
+  });
+  // postMessage(zip);
 };

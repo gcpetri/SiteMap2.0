@@ -153,7 +153,6 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
       } else {
         kmlDoc = await getKmlDom(await file.text());
       }
-      console.log(kmlDoc);
       if (kmlDoc === null) throw new Error('Could not get kmlDoc');
       setKmDoc(kmlDoc);
       await displayKmText(kmlDoc, props.kmlTags);
@@ -170,6 +169,8 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
     // get the tags
     const kmlText:string|any = await getTagMatches(ele, kmlTags);
 
+    const xmlSerlizer = new XMLSerializer();
+
     // add any additional styles required
     const styleXmlItems:any = ele.getElementsByTagName('Style');
     const styleIds: string[] = [];
@@ -177,19 +178,39 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
     if ((styleXmlItems?.length ?? 0) !== 0) {
       await Promise.all(Array.from(styleXmlItems).map(async (item:any) => {
         return new Promise((resolve) => {
-          if ((item?.id?.length ?? 0) !== 0
-            && styleIds.indexOf(item.id) === -1) {
-            styleStr += `${item.outerHTML}`;
-            styleIds.push(item.id);
+          const styleId = item?.attributes[0]?.nodeValue ?? '';
+          if (styleId.length !== 0
+            && styleIds.indexOf(styleId) === -1) {
+            styleStr += `${xmlSerlizer.serializeToString(item)}`;
+            styleIds.push(styleId);
             resolve('');
           }
           resolve('');
         });
       }));
     }
+    // add any additional style maps required
+    const styleMapXmlItems:any = ele?.getElementsByTagName('StyleMap');
+    const styleMapIds: string[] = [];
+    let styleMapStr: string = '';
+    if ((styleMapXmlItems?.length ?? 0) !== 0) {
+      await Promise.all(Array.from(styleMapXmlItems).map(async (item:any) => {
+        return new Promise((resolve) => {
+          const styleId = item?.attributes[0]?.nodeValue ?? '';
+          if (styleId.length !== 0 && styleMapIds.indexOf(styleId) === -1) {
+            styleMapIds.push(styleId);
+            styleMapStr += xmlSerlizer.serializeToString(item);
+            resolve('');
+          } else {
+            resolve('');
+          }
+        });
+      }));
+    }
 
     const finalKmlDomText:string = `${config.kml_header}
       ${styleStr}
+      ${styleMapStr}
       <Folder id="${uuid()}"><name>test-file</name><open>0</open>${kmlText}</Folder>
       ${config.kml_footer}
     `;
@@ -201,6 +222,7 @@ const TestReader = (props:TestReaderProps): React.ReactElement => {
     kmlTags.forEach((tag:string) => {
       kmlTagCountData[tag] = finalKmlDomDoc.getElementsByTagName(tag)?.length ?? 0;
     });
+    kmlTagCountData['Style/StyleMap'] = styleIds.length + styleMapIds.length;
     setKmFileText(`${new XMLSerializer().serializeToString(finalKmlDom)}`);
     setKmTagCounts(kmlTagCountData);
   };
