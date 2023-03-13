@@ -1,5 +1,5 @@
 import { v4 as uuid } from 'uuid';
-import { config } from "../config";
+import { config } from "../utils/config";
 
 const switchGps = (match:string) => {
   const coorPair = match.split(',');
