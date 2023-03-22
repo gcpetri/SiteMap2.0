@@ -13,7 +13,7 @@ const FileTypes: React.FC<FileTypesProps> = (): React.ReactElement => {
   const cachedFileTypes: { [f: string]: boolean } = useSelector(selectFileState)
 
   return (
-    <Grid>
+    <Grid id='file-types-component'>
       <Grid.Container gap={1}>
         <Grid style={{ alignSelf: 'center' }}>
           {Object.values(cachedFileTypes).includes(true) ?
@@ -28,6 +28,7 @@ const FileTypes: React.FC<FileTypesProps> = (): React.ReactElement => {
       </Grid.Container>
 
       <Select
+        id='file-types-selector'
         placeholder='File Types'
         multiple
         value={Object.keys(cachedFileTypes).filter(f => cachedFileTypes[f])}
@@ -39,7 +40,8 @@ const FileTypes: React.FC<FileTypesProps> = (): React.ReactElement => {
           dispatch(setFileState(newFileTypes))
         }}
       >
-        {config.fileTypes.map(fileType => <Select.Option value={fileType} key={fileType}>{fileType}</Select.Option>)}
+        {config.fileTypes.map(fileType =>
+          <Select.Option id={`file-types-selector-option-${fileType}`} value={fileType} key={fileType}>{fileType}</Select.Option>)}
       </Select>
     </Grid>
   )

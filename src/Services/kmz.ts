@@ -10,9 +10,9 @@ export const unzipKmz = async (file: File) => {
   const content = await jsZip.loadAsync(file)
    
   await Promise.all(Object.entries(content.files).map(async ([name, file]: [string, any]) => {
-    if (name.endsWith('.kml')) {
+    if (name.toUpperCase().endsWith('.KML')) {
       kmlData.kml = await file.async('string');
-    } else if (name.endsWith('.PNG') || name.endsWith('.png')) {
+    } else if (name.toUpperCase().endsWith('.PNG')) {
       kmlData.images.push(file);
     }
   }))

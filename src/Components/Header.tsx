@@ -1,4 +1,5 @@
 import { Grid, Spacer, Text } from "@geist-ui/core"
+import { config } from "../utils/config"
 
 interface HeaderProps {
 }
@@ -17,7 +18,8 @@ const Header: React.FC<HeaderProps> = (): React.ReactElement => {
         borderRadius: '0px 0px 6px 6px',
         backgroundColor: '#0070f3',
         color: 'white',
-        zIndex: '1000'
+        zIndex: '1000',
+        pointerEvents: 'none'
       }}
     >
       <Grid.Container
@@ -25,7 +27,7 @@ const Header: React.FC<HeaderProps> = (): React.ReactElement => {
         direction='column'
       >
         <Grid>
-          <Text b>SiteMap</Text>
+          <Text b id='app-name'>{config.appName}</Text>
         </Grid>
         <Grid
           style={{
@@ -34,7 +36,7 @@ const Header: React.FC<HeaderProps> = (): React.ReactElement => {
             fontSize: '0.8rem'
           }}
         >
-          <span className='hide-on-small'>Generate a KMZ for Google Earth!</span>
+          <span className='hide-on-small' id='app-description'>{config.appDescription}</span>
         </Grid>
       </Grid.Container>
     </div>

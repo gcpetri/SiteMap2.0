@@ -1,5 +1,7 @@
 /* eslint-disable no-useless-escape */
 export const config = {
+  appName: 'SiteMap',
+  appDescription: 'Generate a KMZ for Google Earth!',
   default_regex: [
     {
       reg: '[N,W]?\\s*?-?\\d+\\.\\d{4,}o?\\s*,\\s*[N,W]?\\s*-?\\d+\\.\\d{4,}',

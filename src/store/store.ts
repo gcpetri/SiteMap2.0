@@ -4,6 +4,7 @@ import { kmlSlice } from "./kmlSlice";
 import { fileSlice } from "./fileSlice";
 import { scrollSlice } from "./scrollSlice";
 import { settingsValidSlice } from "./settingsValidSlice";
+import { notifSlice } from "./notifSlice";
 
 export const store = configureStore({
   reducer: {
@@ -12,6 +13,7 @@ export const store = configureStore({
     [fileSlice.name]: fileSlice.reducer,
     [scrollSlice.name]: scrollSlice.reducer,
     [settingsValidSlice.name]: settingsValidSlice.reducer,
+    [notifSlice.name]: notifSlice.reducer,
   },
   devTools: true,
 });

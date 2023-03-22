@@ -1,5 +1,5 @@
 export type PageMatch = {
-  regex: {
+  pattern: {
     id: string,
     label: string,
   }[],

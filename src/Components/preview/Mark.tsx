@@ -1,13 +1,13 @@
 import { Badge, Button, Link, Tooltip } from "@geist-ui/core"
 
 interface MarkProps {
-  regex: {
+  pattern: {
     id: string,
     label: string,
   }[],
   matchId: string,
   text: string,
-  onClick: (regexId: string, matchId: string) => any,
+  onClick: (patternId: string, matchId: string) => any,
 }
 
 const Mark: React.FC<MarkProps> = (props): React.ReactElement => {
@@ -18,7 +18,7 @@ const Mark: React.FC<MarkProps> = (props): React.ReactElement => {
         <>
           Matches
           <br></br>
-          {props.regex
+          {props.pattern
             .map((r: { id: string, label: string }, index: number) => (
               <Button
                 key={index}
@@ -36,12 +36,16 @@ const Mark: React.FC<MarkProps> = (props): React.ReactElement => {
         </>
       }
       type='dark'
+      style={{
+        width: 'auto'
+      }}
     >
       <Badge
         key={props.matchId}
         id={props.matchId}
         type='warning'
         padding={0.5}
+        style={{wordWrap: 'break-word'}}
       >
         {props.text}
       </Badge>

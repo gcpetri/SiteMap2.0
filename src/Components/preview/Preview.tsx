@@ -1,4 +1,4 @@
-import { Button, ButtonDropdown, Code, Collapse, Drawer, Grid, Page, Pagination, Spacer, Text } from "@geist-ui/core"
+import { Button, Drawer, Grid, Page, Pagination, Text } from "@geist-ui/core"
 import { ChevronLeftCircle, ChevronRightCircle, Upload } from '@geist-ui/icons'
 import { useEffect, useRef, useState } from "react"
 import { FilePicker } from 'react-file-picker'
@@ -7,8 +7,10 @@ import { v4 as uuidv4 } from 'uuid'
 import { loadFile } from "../../services/fileIO"
 import { unzipKmz } from "../../services/kmz"
 import { getPdfTextByPage } from "../../services/pdf"
+import { getKmlDom } from "../../services/scrapper"
 import { selectFileState } from "../../store/fileSlice"
 import { selectKmlState } from "../../store/kmlSlice"
+import { setNotifState } from "../../store/notifSlice"
 import { Regex, selectRegexState } from "../../store/regexSlice"
 import { selectScrollState } from "../../store/scrollSlice"
 import KmzData from "../../types/KmzData"
@@ -22,32 +24,28 @@ interface PreviewProps {
 }
 
 const Preview: React.FC<PreviewProps> = (): React.ReactElement => {
+  const dispatch = useDispatch()
+  
   const MATCH_MARK_PREFIX = 'mk'
 
+  const [file, setFile] = useState<File|null>(null)
   const [pages, setPages] = useState<string[]>([])
   const [pageNumber, setPageNumber] = useState<number>(1)
+  const [showMatches, setShowMatches] = useState<boolean>(false)
 
   // focused item
   const [focusMatchId, setFocusMatchId] = useState<string|null>(null)
+  const [focusPatternId, setFocusPatternId] = useState<string|null>(null)
 
   const [previewMatches, setPreviewMatches] = useState<PreviewMatches>({})
-
   const [markedPages, setMarkedPages] = useState<JSX.Element[]>([])
-
-  const cachedScroll: string = useSelector(selectScrollState)
 
   const cachedFileTypes: { [f: string]: boolean } = useSelector(selectFileState)
   const cachedRegexState: Regex[] = useSelector(selectRegexState)
   const cachedKmlTags: string[] = useSelector(selectKmlState)
+  const cachedScrollState: string = useSelector(selectScrollState)
 
   const previewParentRef = useRef<HTMLDivElement>(null)
-
-  const [focusPatternId, setFocusPatternId] = useState<string|null>(null)
-
-  const [showMatches, setShowMatches] = useState<boolean>(false)
-
-  const [importText, setImportText] = useState<string>('')
-  const [importError, setImportError] = useState<string>('')
 
   const generateMatchId = () => {
     return MATCH_MARK_PREFIX + '-' +  uuidv4()
@@ -76,7 +74,8 @@ const Preview: React.FC<PreviewProps> = (): React.ReactElement => {
 
   // Start focus on match section
   const handleMarkClick = (patternId: string, matchId: string) => {
-    console.log(matchId)
+    console.log('matchId', matchId)
+    console.log('patternId', patternId)
     focusOnMark(matchId)
     setFocusMatchId(matchId)
     setFocusPatternId(patternId)
@@ -88,116 +87,269 @@ const Preview: React.FC<PreviewProps> = (): React.ReactElement => {
   }, [focusMatchId])
   // End focus on match section
 
-  const importFile = async (file: File) => {
-    if (file.name.endsWith('.pdf') && Object.keys(cachedRegexState).length > 0) {
-      const newPages = await getPdfTextByPage(file)
-      setPages(newPages)
 
-      // initialize match data
-      const initialPreviewMatches: PreviewMatches = {}
-      Object.values(cachedRegexState).forEach((r: Regex) => {
-        initialPreviewMatches[r.id] = {
-          label: r.label,
-          expression: r.expression,
-          matches: [],
-        }
-      })
+  // Start pdf section
+  const readPdf = async (file: File) => {
+    const newPages = await getPdfTextByPage(file)
+    setPages(newPages)
+  }
 
-      // initialize page match data
-      const initialPageMatches: PageMatches = {}
-      newPages.forEach((_: string, index: number) => {
-        initialPageMatches[index] = []
-      })
+  const processPdf = async () => {
+    // initialize match data
+    const initialPreviewMatches: PreviewMatches = {}
+    Object.values(cachedRegexState).forEach((r: Regex) => {
+      initialPreviewMatches[r.id] = {
+        label: r.label,
+        expression: r.expression,
+        matches: [],
+      }
+    })
 
-      // generate regex string
-      let regexStr = ''
-      cachedRegexState.map((r: Regex) => {
-        regexStr += `(?<${r.id}>${r.expression})|`
-      })
-      regexStr = regexStr.slice(0,-1)
-      const regExp = new RegExp(regexStr, 'msgi')
+    // initialize page match data
+    const initialPageMatches: PageMatches = {}
+    pages.forEach((_: string, index: number) => {
+      initialPageMatches[index] = []
+    })
 
-      // find matches in each page
-      newPages.map((page: string, index: number) => {
-        const found = Array.from(page.matchAll(regExp))
-        found.map((match) => {
-          if (match.groups && match.index) {
-            const matchId: string = generateMatchId()
-            const pageMatch: PageMatch = {
-              regex: [],
-              matchId: matchId,
-              match: '',
-              startIndex: match.index,
-              endIndex: match.index,
+    // generate regex string
+    let regexStr = ''
+    cachedRegexState.map((r: Regex) => {
+      regexStr += `(?<${r.id}>${r.expression})|`
+    })
+    regexStr = regexStr.slice(0,-1)
+    const regExp = new RegExp(regexStr, 'msgi')
+
+    // find matches in each page
+    pages.map((page: string, index: number) => {
+      const found = Array.from(page.matchAll(regExp))
+      found.map((match) => {
+        if (match.groups && match.index) {
+          const matchId: string = generateMatchId()
+          const pageMatch: PageMatch = {
+            pattern: [],
+            matchId: matchId,
+            match: '',
+            startIndex: match.index,
+            endIndex: match.index,
+          }
+
+          Object.entries(match.groups).map(([regexId, str]: [string, string]) => {
+            if (str) {
+              initialPreviewMatches[regexId].matches.push({
+                match: str,
+                matchId: matchId,
+                pageNo: index + 1
+              })
+              pageMatch.pattern.push({
+                id: regexId,
+                label: initialPreviewMatches[regexId].label,
+              })
+              pageMatch.match = str
+              pageMatch.endIndex = pageMatch.endIndex + str.length
             }
+          })
 
-            Object.entries(match.groups).map(([regexId, str]: [string, string]) => {
-              if (str) {
-                initialPreviewMatches[regexId].matches.push({
-                  match: str,
-                  matchId: matchId,
-                  pageNo: index + 1
-                })
-                pageMatch.regex.push({
-                  id: regexId,
-                  label: initialPreviewMatches[regexId].label,
-                })
-                pageMatch.match = str
-                pageMatch.endIndex = pageMatch.endIndex + str.length
-              }
-            })
-
-            initialPageMatches[index].push(pageMatch)
-          }
-        })
-      })
-
-      const markedPages: JSX.Element[] = []
-      Object.entries(initialPageMatches).map(([pageNo, data]: [string, PageMatch[]]) => {
-        const pgNumber = parseInt(pageNo)
-        // no matches on this page
-        if (data.length === 0) {
-          return markedPages.push(<>{newPages[pgNumber]}</>)
+          initialPageMatches[index].push(pageMatch)
         }
-      
-        // order the matches on the page
-        const sortedData = data
-        sortedData.sort((a:any, b:any) => a.startIndex > b.startIndex ? 1 : 0)
+      })
+    })
 
-        const markedPage: JSX.Element[] = []
-        let lastIndex: number = 0
-        sortedData.map((d: any, index: number) => {
-          markedPage.push(<span key={`${d.matchId}-pretext`}>{newPages[pgNumber].substring(lastIndex, d.startIndex)}</span>)
+    const markedPages: JSX.Element[] = []
+    Object.entries(initialPageMatches).map(([pageNo, data]: [string, PageMatch[]]) => {
+      const pgNumber = parseInt(pageNo)
+      // no matches on this page
+      if (data.length === 0) {
+        return markedPages.push(<>{pages[pgNumber]}</>)
+      }
+    
+      // order the matches on the page
+      const sortedData = data
+      sortedData.sort((a:any, b:any) => a.startIndex > b.startIndex ? 1 : 0)
 
-          markedPage.push(
-            <Mark
-              regex={d.regex}
-              matchId={d.matchId}
-              text={newPages[pgNumber].substring(d.startIndex, d.endIndex)}
-              onClick={handleMarkClick}
-            />
-          )
+      const markedPage: JSX.Element[] = []
+      let lastIndex: number = 0
+      sortedData.map((d: any, index: number) => {
+        markedPage.push(<span key={`${d.matchId}-pretext`}>{pages[pgNumber].substring(lastIndex, d.startIndex)}</span>)
 
-          if (sortedData.length - 1 === index) {
-            markedPage.push(<span key={`${index}-posttext`}>{newPages[pgNumber].substring(d.endIndex)}</span>)
+        markedPage.push(
+          <Mark
+            key={d.matchId}
+            pattern={d.pattern}
+            matchId={d.matchId}
+            text={pages[pgNumber].substring(d.startIndex, d.endIndex)}
+            onClick={handleMarkClick}
+          />
+        )
+
+        if (sortedData.length - 1 === index) {
+          markedPage.push(<span key={`${index}-posttext`}>{pages[pgNumber].substring(d.endIndex)}</span>)
+        }
+
+        lastIndex = d.endIndex
+      })
+
+      markedPages.push(<>{markedPage}</>)
+    })
+    console.log(initialPageMatches)
+
+    setMarkedPages(markedPages)
+    setPreviewMatches(initialPreviewMatches)
+  }
+  // End pdf section
+
+  // Start kml section
+  const readKml = async (file: File) => {
+    const fileStr = await loadFile(file)
+    setPages([fileStr as string])
+  }
+
+  const processKml = async () => {
+    const kmlDom: Document = await getKmlDom(pages[0])
+    const kmlDomStr: string = kmlDom.documentElement.outerHTML
+
+    // initialize match data
+    const initialPreviewMatches: PreviewMatches = {}
+    cachedKmlTags.forEach((tag: string) => {
+      initialPreviewMatches[tag] = {
+        label: tag,
+        expression: '',
+        matches: [],
+      }
+    })
+
+    // initialize page match data
+    const initialPageMatches: PageMatches = {}
+    pages.forEach((_: string, index: number) => {
+      initialPageMatches[index] = []
+    })
+
+    cachedKmlTags.map((tag: string) => {
+      const kmlTags: HTMLCollectionOf<Element> = kmlDom.getElementsByTagName(tag)
+      if ((kmlTags?.length ?? 0) !== 0) {
+        Array.from(kmlTags).map((item: Element) => {
+          const matchId: string = generateMatchId()
+
+          let kmlTagStr: string = item.outerHTML
+          kmlTagStr = kmlTagStr.replaceAll(/\s?(?:xml)?ns(?:.*)=\".*\"/g, '');
+          const tagIndex: number = kmlDomStr.indexOf(kmlTagStr)
+
+          initialPreviewMatches[tag].matches.push({
+            match: kmlTagStr,
+            matchId: matchId,
+            pageNo: 1,
+          })
+
+          const pageMatch: PageMatch = {
+            pattern: [{
+              id: tag,
+              label: tag,
+            }],
+            matchId: matchId,
+            match: kmlTagStr,
+            startIndex: tagIndex,
+            endIndex: tagIndex + kmlTagStr.length,
           }
 
-          lastIndex = d.endIndex
+          initialPageMatches[0].push(pageMatch)
         })
+      }
+    })
 
-        markedPages.push(<>{markedPage}</>)
-      })
-      console.log(initialPageMatches)
+    const markedPages: JSX.Element[] = []
 
-      setMarkedPages(markedPages)
-      setPreviewMatches(initialPreviewMatches)
-    } else if (file.name.endsWith('.kml')) {
-      const fileStr = await loadFile(file)
-      setPages([fileStr as string])
-    } else if (file.name.endsWith('.kmz')) {
-      const kmzData: KmzData = await unzipKmz(file)
-      setPages([kmzData.kml])
+    const initialPageMatch = initialPageMatches[0]
+    // no matches on this page
+    if (initialPageMatch.length === 0) {
+      return markedPages.push(<>{kmlDomStr}</>)
     }
+    
+    // order the matches on the page
+    const sortedData = initialPageMatch
+    sortedData.sort((a:any, b:any) => a.startIndex > b.startIndex ? 1 : 0)
+
+    const markedPage: JSX.Element[] = []
+    let lastIndex: number = 0
+    sortedData.map((d: any, index: number) => {
+      markedPage.push(<span key={`${d.matchId}-pretext`}>{kmlDomStr.substring(lastIndex, d.startIndex)}</span>)
+
+      markedPage.push(<Mark
+        key={d.matchId}
+        pattern={d.pattern}
+        matchId={d.matchId}
+        text={kmlDomStr.substring(d.startIndex, d.endIndex)}
+        onClick={handleMarkClick}
+      />)
+
+      if (sortedData.length - 1 === index) {
+        markedPage.push(<span key={`${index}-posttext`}>{kmlDomStr.substring(d.endIndex)}</span>)
+      }
+
+      lastIndex = d.endIndex
+    })
+    markedPages.push(<>{markedPage}</>)
+
+    console.log(initialPageMatches)
+
+    setMarkedPages(markedPages)
+
+    setPreviewMatches(initialPreviewMatches)
+  }
+  // End kml section
+
+  // Start kmz section
+  const readKmz = async (file: File) => {
+    const kmzData: KmzData = await unzipKmz(file)
+    setPages([kmzData.kml])
+  }
+  // End kmz section
+
+  const reset = () => {
+    setPages([])
+    setMarkedPages([])
+    setFile(null)
+    setFocusMatchId(null)
+    setFocusPatternId(null)
+    setPageNumber(1)
+    setPreviewMatches({})
+    setShowMatches(false)
+  }
+
+  useEffect(() => {
+    if (cachedScrollState === 'preview' && pages.length !== 0 && file) {
+      if (file.name.toLowerCase().endsWith('.pdf') && Object.keys(cachedRegexState).length > 0) {
+        processPdf()
+      }
+      else if ((file.name.toLowerCase().endsWith('.kml') || file.name.toLowerCase().endsWith('.kmz')) && cachedKmlTags.length > 0) {
+        processKml()
+      }
+      else {
+        reset()
+      }
+    }
+  }, [pages, cachedScrollState])
+
+  useEffect(() => {
+    if (file !== null) {
+      if (file.name.toLowerCase().endsWith('.pdf') && Object.keys(cachedRegexState).length > 0) {
+        readPdf(file)
+      } else if (file.name.toLowerCase().endsWith('.kml')) {
+        readKml(file)
+      } else if (file.name.toLowerCase().endsWith('.kmz')) {
+        readKmz(file)
+      } else {
+        dispatch(setNotifState({
+          title: `File is not of type(s): ${
+            Object.keys(cachedFileTypes)
+            .filter(fileType => cachedFileTypes[fileType])
+          }`,
+          type: 'error',
+        }))
+      }
+    }
+  }, [file])
+
+  const importFile = async (file: File) => {
+    setFile(file)
   }
 
   return (
@@ -212,6 +364,7 @@ const Preview: React.FC<PreviewProps> = (): React.ReactElement => {
       <Drawer visible={showMatches} 
         onClose={() => setShowMatches(false)}
         placement="right"
+        style={{ maxWidth: '90%' }}
       >
         <Drawer.Title style={{
           color: '#0070f3'
@@ -264,7 +417,7 @@ const Preview: React.FC<PreviewProps> = (): React.ReactElement => {
                   justify='space-between'
                 >
                   <Grid>
-                    <Pagination
+                    {pages.length > 1 && <Pagination
                       count={pages.length}
                       limit={5}
                       onChange={setPageNumber}
@@ -272,13 +425,15 @@ const Preview: React.FC<PreviewProps> = (): React.ReactElement => {
                     >
                       <Pagination.Next><ChevronRightCircle /></Pagination.Next>
                       <Pagination.Previous><ChevronLeftCircle /></Pagination.Previous>
-                    </Pagination>
+                    </Pagination>}
                   </Grid>
                   <Grid>
                     <FilePicker
                       extensions={Object.keys(cachedFileTypes).map(suffix => suffix.toLocaleLowerCase())}
                       onChange={importFile}
-                      onError={setImportError}
+                      onError={(error: string) => {
+                        dispatch(setNotifState({ type: 'error', title: error }))
+                      }}
                     >
                       <Button
                         auto

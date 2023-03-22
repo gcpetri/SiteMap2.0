@@ -79,11 +79,17 @@ const Matches: React.FC<MatchesProps> = (props): React.ReactElement => {
                   style={{
                     borderRadius: '5px',
                     paddingLeft: '2px',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
                   }}
                 >
                   <Grid
-                    style={{ pointerEvents: 'none' }}
+                    style={{
+                      pointerEvents: 'none',
+                      maxInlineSize: '400px',
+                      wordWrap: 'break-word',
+                      maxHeight: '50px',
+                      overflow: 'hidden'
+                    }}
                   >
                     {match.match}
                   </Grid>

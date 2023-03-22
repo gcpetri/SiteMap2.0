@@ -2,12 +2,12 @@ import { createSlice } from '@reduxjs/toolkit';
 import { RootState } from './store';
 
 export type ScrollState = {
-  page: 'Settings'|'Preview'|'Scraper'
+  page: 'settings'|'preview'|'scraper'|'results'
 }
 
 // Initial state
 export const initialState: ScrollState = {
-  page: 'Settings'
+  page: 'settings'
 }
 
 // Actual Slice
@@ -16,7 +16,7 @@ export const scrollSlice = createSlice({
   initialState,
   reducers: {
     setScrollState(state: ScrollState, action: { payload: string }) {
-      state.page = action.payload as 'Settings'|'Preview'|'Scraper'
+      state.page = action.payload as 'settings'|'preview'|'scraper'|'results'
     }
   }
 })

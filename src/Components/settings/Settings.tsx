@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from "react-redux"
 import { loadFile } from "../../services/fileIO"
 import { selectFileState, setFileState } from "../../store/fileSlice"
 import { selectKmlState, setKmlState } from "../../store/kmlSlice"
+import { setNotifState } from "../../store/notifSlice"
 import { Regex, selectRegexState, setRegexState } from "../../store/regexSlice"
 import { selectSettingsValidState, setSettingsValidState } from "../../store/settingsValidSlice"
 import SettingsFile from "../../types/SettingsFile"
@@ -23,8 +24,6 @@ const Settings: React.FC<SettingsProps> = (): React.ReactElement => {
   const cachedRegexState: Regex[] = useSelector(selectRegexState)
   const cachedKmlTags: string[] = useSelector(selectKmlState)
   const cachedSettingsValid: boolean = useSelector(selectSettingsValidState)
-
-  const [importError, setImportError] = useState<string>('')
 
   useEffect(() => {
     const validFileTypes = Object.values(cachedFileTypes).includes(true)
@@ -47,7 +46,7 @@ const Settings: React.FC<SettingsProps> = (): React.ReactElement => {
       kmlTags: cachedFileTypes.KMZ || cachedFileTypes.KML ? cachedKmlTags : [],
     }
 
-    const blob = new Blob([JSON.stringify(settings)], {type: 'application/json'})
+    const blob = new Blob([JSON.stringify(settings)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -66,7 +65,6 @@ const Settings: React.FC<SettingsProps> = (): React.ReactElement => {
       dispatch(setFileState(json.fileTypes))
       dispatch(setRegexState(json.regex))
       dispatch(setKmlState(json.kmlTags))
-      setImportError('')
     }
   }
 
@@ -100,9 +98,12 @@ const Settings: React.FC<SettingsProps> = (): React.ReactElement => {
                 <FilePicker
                   extensions={['json']}
                   onChange={importSettings}
-                  onError={setImportError}
+                  onError={(error: string) => {
+                    dispatch(setNotifState({ type: 'error', title: error }))
+                  }}
                 >
                   <Button
+                    id='import-setup-file-btn'
                     auto
                     ghost
                     type='secondary-light'
@@ -116,6 +117,7 @@ const Settings: React.FC<SettingsProps> = (): React.ReactElement => {
               </Grid>
               <Grid>
                 <Button
+                  id='export-setup-file-btn'
                   auto
                   type='secondary-light'
                   icon={<Download />}
@@ -128,9 +130,6 @@ const Settings: React.FC<SettingsProps> = (): React.ReactElement => {
                 </Button>
               </Grid>
             </Grid.Container>
-          </Grid>
-          <Grid>
-            <Text type='error'>{importError}</Text>
           </Grid>
         </Grid.Container>
       </Page.Content>

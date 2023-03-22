@@ -13,7 +13,7 @@ const KmlTags: React.FC<KmlTagsProps> = (): React.ReactElement => {
   const cachedKmlTags: string = useSelector(selectKmlState)
 
   return (
-    <Grid>
+    <Grid id='kml-tags-component'>
       <Grid.Container gap={1}>
         <Grid style={{ alignSelf: 'center' }}>
           {cachedKmlTags.length > 0 ?
@@ -38,6 +38,7 @@ const KmlTags: React.FC<KmlTagsProps> = (): React.ReactElement => {
       <Grid.Container direction='column'>
         <Grid>
           <Select
+            id='kml-tags-selector'
             placeholder='Tags'
             multiple
             initialValue={cachedKmlTags}
@@ -45,7 +46,8 @@ const KmlTags: React.FC<KmlTagsProps> = (): React.ReactElement => {
             width='90%'
             onChange={(val: string|string[]) => dispatch(setKmlState(typeof val === 'string' ? [val] : val))}
           >
-            {config.kmlTagOptions.map(name => <Select.Option value={name} key={name}>{name}</Select.Option>)}
+            {config.kmlTagOptions.map(name =>
+              <Select.Option id={`kml-tags-selector-option-${name}`} value={name} key={name}>{name}</Select.Option>)}
           </Select>
         </Grid>
       </Grid.Container>

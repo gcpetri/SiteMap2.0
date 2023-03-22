@@ -28,6 +28,7 @@ html, body {
   max-height: 65vh;
   overflow: hidden;
   overflow-y: scroll;
+  overflow-wrap: break-word;
 }
 
 #preview-show-matches-btn {

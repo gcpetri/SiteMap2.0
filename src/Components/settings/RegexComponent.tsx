@@ -124,7 +124,7 @@ const RegexComponent: React.FC<RegexComponentProps> = (): React.ReactElement => 
   }
 
   return (
-    <Grid>
+    <Grid id='regex-component'>
       <Grid.Container gap={1}>
         <Grid style={{ alignSelf: 'center' }}>
           {cachedRegexState.find(r => r.expression.length > 0) ?
@@ -148,7 +148,7 @@ const RegexComponent: React.FC<RegexComponentProps> = (): React.ReactElement => 
 
       <Grid.Container gap={1} direction='column'>
         <Grid style={{ maxHeight: '140px', overflowY: 'scroll'}}>
-          <Table data={cachedRegexState}>
+          <Table data={cachedRegexState} id='regex-table'>
             <Table.Column prop='label' label='label' render={renderUpdateLabelAction} />
             <Table.Column prop='expression' label='expression' render={renderUpdateExpressionAction} />
             <Table.Column prop='operation' label='' render={renderRemoveAction} />
@@ -156,6 +156,7 @@ const RegexComponent: React.FC<RegexComponentProps> = (): React.ReactElement => 
         </Grid>
         <Grid xs={8}>
           <Button
+            id='regex-add-expr-btn'
             scale={0.85}
             type='success-light'
             h={0.75}

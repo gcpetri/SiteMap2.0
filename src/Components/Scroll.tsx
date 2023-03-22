@@ -1,13 +1,9 @@
 import { Button, Grid, Text } from "@geist-ui/core"
 import { ChevronDown } from "@geist-ui/icons"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useDispatch, useSelector } from "react-redux"
-import { selectFileState } from "../store/fileSlice"
-import { selectKmlState } from "../store/kmlSlice"
-import { Regex, selectRegexState } from "../store/regexSlice"
 import { selectScrollState, setScrollState } from "../store/scrollSlice"
 import { selectSettingsValidState } from "../store/settingsValidSlice"
-import useWindowSize from "../utils/useWindowSize"
 
 interface ScrollProps {
   section: string,
@@ -15,12 +11,13 @@ interface ScrollProps {
 }
 
 const Scroll: React.FC<ScrollProps> = (props): React.ReactElement => {
+  const dispatch = useDispatch()
+
   const PAGES: string[] = ['settings', 'preview', 'scraper', 'results']
   const DEFAULT_PAGE: string = PAGES[0]
 
   const cachedSettingsValid: boolean = useSelector(selectSettingsValidState)
-
-  const [currentPage, setCurrentPage] = useState<string>(DEFAULT_PAGE)
+  const cachedScrollState: string = useSelector(selectScrollState)
 
   const refreshElements = () => {
     const elements: {
@@ -33,7 +30,7 @@ const Scroll: React.FC<ScrollProps> = (props): React.ReactElement => {
   useEffect(() => {
     const elements = refreshElements()
     const currentPg: string|undefined = Object.keys(elements).find((str: string) => elements[str] && elements[str].getBoundingClientRect().top === 0)
-    setCurrentPage(currentPg || DEFAULT_PAGE)
+    dispatch(setScrollState(currentPg || DEFAULT_PAGE))
   }, [])
 
   const onNextClick = () => {
@@ -43,7 +40,7 @@ const Scroll: React.FC<ScrollProps> = (props): React.ReactElement => {
         && elements[pageName].getBoundingClientRect().top === 0
         && index !== PAGES.length - 1
         && elements[PAGES[index + 1]]) {
-        setCurrentPage(PAGES[index + 1])
+        dispatch(setScrollState(PAGES[index + 1]))
         elements[PAGES[index + 1]].scrollIntoView({ behavior: 'smooth' })
       }
     })
@@ -53,10 +50,10 @@ const Scroll: React.FC<ScrollProps> = (props): React.ReactElement => {
     const elements = refreshElements()
     PAGES.map((pageName: string, index: number) => {
       if (elements[pageName]
-        && elements[pageName].getBoundingClientRect().top === 0
+        && elements[pageName].getBoundingClientRect().top < 200
         && index !== 0
         && elements[PAGES[index - 1]]) {
-        setCurrentPage(PAGES[index - 1])
+        dispatch(setScrollState(PAGES[index - 1]))
         elements[PAGES[index - 1]].scrollIntoView({ behavior: 'smooth' })
       }
     })
@@ -66,7 +63,7 @@ const Scroll: React.FC<ScrollProps> = (props): React.ReactElement => {
     <div id='scroll-component'>
       <Grid.Container>
         <Grid>
-          {currentPage !== PAGES[0] && <Button
+          {cachedScrollState !== PAGES[0] && <Button
             auto
             type='abort'
             paddingTop={0.8}
@@ -80,9 +77,10 @@ const Scroll: React.FC<ScrollProps> = (props): React.ReactElement => {
           <Grid.Container justify='center' direction='column' alignItems='center'>
             <Grid>
               <Button
+                id='scroll-next-btn'
                 auto
                 type='warning'
-                disabled={!cachedSettingsValid && currentPage !== PAGES[PAGES.length - 1]}
+                disabled={!cachedSettingsValid && cachedScrollState !== PAGES[PAGES.length - 1]}
                 onClick={onNextClick}
               >
                 <Text b>{'Next'}</Text>
